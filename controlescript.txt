@@ -1,0 +1,325 @@
+#!/bin/bash
+
+# Bestand om uitvoer in op te slaan
+outputfile="check_opdrachten.txt"
+
+echo "Opdracht 1: Raspi en Sunny mappen aanmaken" >> "$outputfile"
+months=("July" "Aug")
+directories=("Raspi" "Sunny")
+
+for dir in "${directories[@]}"; do
+	for month in "${months[@]}"; do
+		for i in {1..31}; do
+        		if [ -d "/home/$dir/$month/$i" ]; then
+            			echo "Map /home/$dir/$month/$i bestaat" >> "$outputfile"
+        		else
+            			echo "Map /home/$dir/$month/$i bestaat niet" >> "$outputfile"
+        		fi
+    		done
+	done
+done
+
+echo "Opdracht 2: Manageraccount "goofy" aanmaken" >> "$outputfile"
+username="goofy"
+initial_password="hellogoof"
+
+if id -u "$username" >/dev/null 2>&1; then
+    echo "Gebruiker $username bestaat" >> "$outputfile"
+    
+    if [ "$(getent passwd $username | cut -d':' -f6)" = "/home/$username" ]; then
+        echo "Homedirectory van gebruiker $username is correct" >> "$outputfile"
+    else
+        echo "Homedirectory van gebruiker $username is niet correct" >> "$outputfile"
+    fi
+    
+    if [ "$(sudo grep -c "^$username:$initial_password" /etc/shadow)" -eq 1 ]; then
+        echo "Initieel wachtwoord voor gebruiker $username is correct" >> "$outputfile"
+    else
+        echo "Initieel wachtwoord voor gebruiker $username is niet correct" >> "$outputfile"
+    fi
+    
+    if [ "$(sudo chage -l $username | grep "Password must be changed" | wc -l)" -eq 1 ]; then
+        echo "Wachtwoord van gebruiker $username moet de eerste keer worden gewijzigd" >> "$outputfile"
+    else
+        echo "Wachtwoord van gebruiker $username hoeft niet de eerste keer te worden gewijzigd" >> "$outputfile"
+    fi
+else
+    echo "Gebruiker $username bestaat niet" >> "$outputfile"
+fi
+
+echo "Opdracht 3: Verkoopaccounts aanmaken" >> "$outputfile"
+accounts=("R" "S")
+directories=("Raspi" "Sunny")
+
+for i in {0..1}; do
+	for j in {1..6}; do
+		username="${accounts[i]}${j}"
+		homedir="/home/${directories[i]}/$username"
+
+		if id -u "$username" >/dev/null 2>&1; then
+			echo "Gebruiker $username bestaat" >> "$outputfile"
+
+			if [ "$(getent passwd $username | cut -d':' -f6)" = "$homedir" ]; then
+				echo "Homedirectory van gebruiker $username is correct" >> "$outputfile"
+            		else
+                		echo "Homedirectory van gebruiker $username is niet correct" >> "$outputfile"
+            		fi
+
+			currentdate=$(date +%s)
+			expiredate=$(sudo chage -l $username | awk -F': ' '/Account expires/ {print $2}'}
+			expiretimestamp=$(date -d "$expiredate" +%s)
+            		daysremaining=$(( (expiretimestamp - currentdate) / 86400 ))
+            
+            		if [ "$daysremaining" -le 62 ]; then
+                		echo "Uitschakeldatum van gebruiker $username is correct ($daysremaining dagen resterend)" >> "$outputfile"
+            		else
+                		echo "Uitschakeldatum van gebruiker $username is niet correct ($days_remaining dagen resterend)" >> "$outputfile"
+            		fi
+        	else
+            		echo "Gebruiker $username bestaat niet" >> "$outputfile"
+        	fi
+	done
+done
+
+echo "Opdracht 4: Tweede schijf en partitie aanmaken" >> "$outputfile"
+partition="/dev/sdb1"
+mount_point="/home/data"
+filesystem_type="xfs"
+
+if [ -b "$partition" ]; then
+    echo "Partitie $partition bestaat" >> "$outputfile"
+    
+    if blkid -o value -s TYPE "$partition" | grep -q "$filesystem_type"; then
+        echo "Bestandssysteem type van partitie $partition is $filesystem_type" >> "$outputfile"
+    else
+        echo "Bestandssysteem type van partitie $partition is niet $filesystem_type" >> "$outputfile"
+    fi
+    
+    if [ -d "$mount_point" ]; then
+        echo "Mountpunt $mount_point bestaat" >> "$outputfile"
+        
+        if mountpoint -q "$mount_point"; then
+            echo "Partitie $partition is correct gemount op $mount_point" >> "$outputfile"
+        else
+            echo "Partitie $partition is niet gemount op $mount_point" >> "$outputfile"
+        fi
+    else
+        echo "Mountpunt $mount_point bestaat niet" >> "$outputfile"
+    fi
+else
+    echo "Partitie $partition bestaat niet" >> "$outputfile"
+fi
+
+echo "Opdracht 5: Bestandssysteem maken en koppelen" >> "$outputfile"
+groupname="Sales"
+accounts=("R" "S")
+directory="/home/data"
+
+if grep -q "^$groupname:" /etc/group; then
+    echo "Groep $groupname bestaat" >> "$outputfile"
+else
+    echo "Groep $groupname bestaat niet" >> "$outputfile"
+fi
+
+for i in {0..1}; do
+	for j in {1..6}; do
+		username="${accounts[i]}${j}"
+		if id -nG "$username" | grep -qw "$groupname"; then
+			echo "Gebruiker $username is lid van de groep $groupname" >> "$outputfile"
+		else
+			echo "Gebruiker $username is geen lid van de groep $groupname" >> "$outputfile"
+		fi
+	done
+done
+
+if [ -d "$directory" ]; then
+	owner=$(stat -c '%U' "$directory")
+	group=$(stat -c '%G' "$directory")
+	permissions=$(stat -c '%A' "$directory")
+
+	if [ "$owner" = "goofy" ] && [ "$group" = "$groupname" ] && [ "$permissions" = "drwxrwx---" ]; then
+		echo "De permissies op de directory $directory zijn correct ingesteld" >> "$outputfile"
+	else
+		echo "De permissies op de directory $directory zijn niet correct ingesteld" >> "$outputfile"
+	fi
+else
+	echo "De directory $directory bestaat niet" >> "$outputfile"
+fi
+
+echo "Opdracht 6: Sales-groep maken en permissies instellen" >> "$outputfile"
+accounts=("R" "S")
+
+if grep -q "^Sales:" /etc/group; then
+	echo "De groep Sales bestaat" >> "$outputfile"
+else
+	echo "De groep Sales bestaat niet" >> "$outputfile"
+fi
+
+users=("goofy")
+for i in {0..1}; do
+	for j in {1..6}; do
+		username="${accounts[i]}${j}"
+		users+=("$username")
+	done
+done
+
+for user in "${users[@]}"; do
+	if id -nG "$user" | grep -q "Sales"; then
+		echo "De gebruiker $user is lid van de groep Sales." >> "$outputfile"
+	else
+		echo "De gebruiker $user is geen lid van de groep Sales." >> "$outputfile"
+	fi
+done
+
+if [ -d "/home/data" ]; then
+	owner=$(stat -c "%U" /home/data)
+	group=$(stat -c "%G" /home/data)
+	permissions=$(stat -c "%a" /home/data)
+    
+	if [ "$owner" = "goofy" ] && [ "$group" = "Sales" ] && [ "$permissions" = "770" ]; then
+		echo "De permissies van /home/data zijn correct ingesteld." >> "$outputfile"
+	else
+		echo "De permissies van /home/data zijn niet correct ingesteld." >> "$outputfile"
+	fi
+else
+	echo "De directory /home/data bestaat niet." >> "$outputfile"
+fi
+
+echo "Opdracht 7: Raspi en Sunny mappen instellen voor Sales-groep" >> "$outputfile"
+directories=("Raspi" "Sunny")
+
+if grep -q "^Sales:" /etc/group; then
+	echo "De groep Sales bestaat." >> "$outputfile"
+else
+	echo "De groep Sales bestaat niet." >> "$outputfile"
+fi
+
+for dir in "${directories[@]}"; do
+	if [[ -d "/home/$dir" ]]; then
+		raspi_permissions=$(ls -ld /home/$dir)
+		if [[ $raspi_permissions == *"rwxrwx---"* ]]; then
+			echo "De map /home/$dir heeft de juiste permissies (rwxrwx---)." >> "$outputfile"
+		else
+			echo "De map /home/$dir heeft niet de juiste permissies (rwxrwx---)." >> "$outputfile"
+		fi
+	else
+		echo "De map /home/$dir bestaat niet." >> "$outputfile"
+	fi
+done
+
+echo "Opdracht 8: LVM-setup voor filestore" >> "$outputfile"
+partities=("/dev/sdb2" "/dev/sdb3")
+for part in "${partities[@]}"; do
+	if sudo parted -l | grep -q $part; then
+		echo "Partitie $part is gemaakt" >> "$outputfile"
+	else
+		echo "Partitie $part is niet gemaakt" >> "$outputfile"
+	fi
+done
+
+if sudo vgdisplay | grep -q "orders_vg"; then
+    echo "Volumegroep (orders_vg) is gemaakt" >> "$outputfile"
+else
+    echo "Volumegroep (orders_vg) is niet gemaakt" >> "$outputfile"
+fi
+
+if sudo lvdisplay /dev/orders_vg/orders_lv &>/dev/null; then
+    echo "Logisch volume (orders_lv) is gemaakt" >> "$outputfile"
+else
+    echo "Logisch volume (orders_lv) is niet gemaakt" >> "$outputfile"
+fi
+
+if sudo file -sL /dev/orders_vg/orders_lv | grep -q "SGI XFS filesystem"; then
+    echo "Bestandssysteem op orders_lv is van het type XFS" >> "$outputfile"
+else
+    echo "Bestandssysteem op orders_lv is niet van het type XFS" >> "$outputfile"
+fi
+
+if grep -q "/dev/orders_vg/orders_lv /home/orders xfs" /etc/fstab; then
+    echo "Bestandssysteem orders_lv is persistent gekoppeld aan /home/orders" >> "$outputfile"
+else
+    echo "Bestandssysteem orders_lv is niet persistent gekoppeld aan /home/orders" >> "$outputfile"
+fi
+
+echo "Opdracht 9: Kladblokpartitie maken en koppelen" >> "$outputfile"
+if sudo parted -l | grep -q /dev/sdb4; then
+	echo "Partitie $part is gemaakt" >> "$outputfile"
+else
+	echo "Partitie $part is niet gemaakt" >> "$outputfile"
+fi
+
+if mount | grep -q "/home/tmp.*type xfs"; then
+	echo "Bestandssysteem voor /home/tmp correct geformatteerd" >> "$outputfile"
+else
+	echo "Bestandssysteem voor /home/tmp niet correct geformatteerd" >> "$outputfile"
+fi
+
+if grep -q "/dev/sdb4.* /home/tmp " /etc/fstab; then
+	echo "/home/tmp is aanhoudend gekoppeld" >> "$outputfile"
+else
+	echo "/home/tmp is niet aanhoudend gekoppeld" >> "$outputfile"
+fi
+
+if ls -ld /home/tmp | grep -q "^drwxrwxrwt"; then
+	echo "Permissies van /home/tmp correct ingesteld" >> "$outputfile"
+else
+	echo "Permissies van /home/tmp niet correct ingesteld" >> "$outputfile"
+fi
+
+echo "Opdracht 10: worrysome_people bestand aanmaken" >> "$outputfile"
+if [ -f "/home/worrysome_people" ]; then
+	if grep -q "ALL=(ALL) ALL" /home/worrysome_people; then
+		echo "Het bestand worrysome_people bestaat en heeft de juiste inhoud." >> "$outputfile"
+	else
+		echo "Het bestand worrysome_people bestaat, maar heeft niet de juiste inhoud." >> "$outputfile"
+	fi
+else
+	echo "Het bestand worrysome_people bestaat niet." >> "$outputfile"
+fi
+
+echo "Opdracht 11: Samba-pakket installeren en service blokkeren" >> "$outputfile"
+if rpm -q samba >/dev/null 2>&1; then
+	echo "Samba-pakket is geïnstalleerd" >> "$outputfile"
+else
+	echo "Samba-pakket is niet geïnstalleerd" >> "$outputfile"
+fi
+
+if systemctl is-enabled smb.service >/dev/null 2>&1; then
+	echo "Samba-service is geblokkeerd om automatisch te starten" >> "$outputfile"
+else
+	echo "Samba-service is niet geblokkeerd om automatisch te starten" >> "$outputfile"
+fi
+
+echo "Opdracht 12: Apache webserver installeren en configureren" >> "$outputfile"
+if command -v apache2 >/dev/null 2>&1; then
+	echo "Apache is geïnstalleerd" >> "$outputfile"
+else
+	echo "Apache is niet geïnstalleerd" >> "$outputfile"
+fi
+
+if systemctl is-active --quiet apache2; then
+	echo "Apache-service is actief" >> "$outputfile"
+else
+	echo "Apache-service is niet actief" >> "$outputfile"
+fi
+
+if systemctl is-enabled --quiet apache2; then
+	echo "Apache-service is persistent" >> "$outputfile"
+else
+	echo "Apache-service is niet persistent" >> "$outputfile"
+fi
+
+if [ -f /var/www/html/index.html ]; then
+	echo "De webpagina index.html bestaat" >> "$outputfile"
+else
+	echo "De webpagina index.html bestaat niet" >> "$outputfile"
+fi
+
+expected_content="<!DOCTYPE html><html><body><h1>Hallo wereld voor ons zonverbrandende publiek!</h1></body></html>"
+actual_content=$(cat /var/www/html/index.html)
+if [ "$expected_content" == "$actual_content" ]; then
+	echo "De inhoud van de webpagina index.html klopt" >> "$outputfile"
+else
+	echo "De inhoud van de webpagina index.html klopt niet" >> "$outputfile"
+fi
+
